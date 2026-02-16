@@ -28,4 +28,4 @@ def view_patient(patient_id : str = Path(...,description = 'ID of the Patient in
     data = load_data()
     if patient_id in data:
         return data[patient_id]
-    return {'error':'patient not found'}
+    return {'error':'patient not found in the DB'}
