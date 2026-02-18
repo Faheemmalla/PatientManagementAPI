@@ -5,7 +5,7 @@ It allows you to manage patient records with automatic BMI and health status cal
 
 ---
 
-## 🚀 Features
+## -> Features
 
 - Create Patient
 - View All Patients
