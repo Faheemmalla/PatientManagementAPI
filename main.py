@@ -1,9 +1,10 @@
 from fastapi import FastAPI,Path,HTTPException,Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel,Field,computed_field
-from typing import Annotated,Literal
+from typing import Annotated,Literal,Optional
 #description add krne k liye in pydantic model annoted ko isseliye import kiya
 import json
+app = FastAPI()
 
 class Patient(BaseModel):
     # three dots ka matlab compulsory wala field
@@ -20,7 +21,7 @@ class Patient(BaseModel):
     @computed_field
     @property
     def bmi(self)->float:
-        bmi = round(self.weight/(self.height**2),2)
+        bmi = self.weight/(self.height**2)
         return bmi
     @computed_field
     @property
@@ -33,11 +34,43 @@ class Patient(BaseModel):
             verdict = "Normal"
         else:
             return "Obese"
+        
+class PatientUpdate(BaseModel):
+    name: Annotated[Optional[str], Field(default=None)]
+    city: Annotated[Optional[str], Field(default=None)]
+    age: Annotated[Optional[int], Field(default=None, gt=0)]
+    gender: Annotated[Optional[Literal['male', 'female']], Field(default=None)]
+    height: Annotated[Optional[float], Field(default=None, gt=0)]
+    weight: Annotated[Optional[float], Field(default=None, gt=0)]
+@app.put('/edit/{patient_id}')
+def update_patient(patient_id:str,patient_update : PatientUpdate):
+    data = load_data()
+    if patient_id not in data:
+        raise HTTPException(status_code=404,detail='Patient not found')
+    
+    #ab agr id galat nhi hai toh we will extract all the data related to that patient from the database , so that fir jo update krrna hai we will update , ye hum like a dictionary extract krta hai
+    existing_patient_info = data[patient_id]
+    # what wee will do jo user ko update krna hai yaane jo patient_update details hai ausko bhi hum dictionary bana denege then donu dictinary then ienpe kaam krna easy hoga
+    updated_patient_info=patient_update.model_dump(exclude_unset=True)
+    #exclude unset tre se hoga hai , jo cheezian update krni hogi like age sirf wahi aayegi dict mai sab nai aayega 
+    for key,value in updated_patient_info.items():
+        existing_patient_info[key] = value
+    #hum nayi dict  mai kloop lkagate hai aur purane mai jaake jo bhi update krne hai aus key ka naya value update kr rahe hai
+    ##BIG ISSUE
+    #if we update weight then verdict aur bmi should also update jo donu depend on weight 
+    #ISSELIYE WE DO THE FOLLOWING THINGS
+    #existing_patient_info -> pydantic object -> updated bmi + verdict
+    existing_patient_info['id'] = patient_id #phele patien id add kiya
+    patient_pydantic_obj = Patient(**existing_patient_info)
+    #ab ies pydantic ko wapas dict mai convert krdo (pydantic object -> dict)
+    existing_patient_info=patient_pydantic_obj.model_dump(exclude='id')
 
+    #now adding this dictionary to data
+    data[patient_id] = existing_patient_info
 
-
-
-app = FastAPI()
+    #now save data
+    save_data(data)
+    return JSONResponse(status_code=200,content={'message':'Patient Updated'})
 @app.get('/') #yaane hamari http wali link k baad / ye daale toh he will get helloworld
 def hello():
     return {'message':"Patient Management System API"}
@@ -102,3 +135,13 @@ def create_patient(patient: Patient): # yaane humne patient(saara data ) data bh
     #auppar utilitty function banayi for to write in the json file 
     save_data(data)
     return JSONResponse(status_code=201,content={'message':'Patient created Sucessfully.'})
+@app.delete('/delete{patient_id}')
+def delete_patient(patient_id:str):
+    #loaddata
+    data = load_data()
+    if patient_id not in data:
+        raise HTTPException(status_code=404,detail='Patient not found')
+    #agr hai toh simply delete kro
+    del data[patient_id]
+    save_data(data)
+    return JSONResponse(status_code=200,content={'message':'patient deleted'})
